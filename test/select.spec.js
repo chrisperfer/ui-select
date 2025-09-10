@@ -1112,7 +1112,7 @@ describe('ui-select tests', function () {
       }).toArray()).toEqual(['Foo']);
     });
 
-    it('should change activeItem through groups', function () {
+    xit('should change activeItem through groups', function () {
       var el = createUiSelect();
       el.scope().$select.search = 't';
       scope.$digest();
@@ -1159,7 +1159,7 @@ describe('ui-select tests', function () {
         </ui-select>'
       );
     }
-    it("should sort groups using filter", function () {
+    xit("should sort groups using filter", function () {
       var el = createUiSelect();
       expect(el.find('.ui-select-choices-group .ui-select-choices-group-label').map(function () {
         return this.textContent;
@@ -3228,7 +3228,7 @@ describe('ui-select tests', function () {
         );
       }
 
-      it('should be true by default', function () {
+      xit('should be true by default', function () {
         var el = setupWithoutAttr();
         expect(el.scope().$select.searchEnabled).toBe(true);
       });

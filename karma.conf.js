@@ -15,9 +15,20 @@ module.exports = function(config) {
       'node_modules/angular-mocks/angular-mocks.js',
 
       'dist/select.js',
+      'src/**/*.html',
       'test/helpers.js',
       'test/**/*.spec.js'
     ],
+
+    // Preprocessors
+    preprocessors: {
+      'src/**/*.html': ['ng-html2js']
+    },
+
+    ngHtml2JsPreprocessor: {
+      stripPrefix: 'src/',
+      moduleName: 'ui.select'
+    },
 
     // List of files to exclude
     exclude: ['./index.js'],

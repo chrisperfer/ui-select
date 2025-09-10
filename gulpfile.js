@@ -2,9 +2,8 @@ var fs = require('fs');
 var del = require('del');
 var gulp = require('gulp');
 var streamqueue = require('streamqueue');
-var karma = require('karma').server;
+var karma = require('karma');
 var $ = require('gulp-load-plugins')();
-var runSequence = require('run-sequence');
 var conventionalRecommendedBump = require('conventional-recommended-bump');
 var titleCase = require('title-case');
 
@@ -19,26 +18,26 @@ var config = {
       ' */\n\n\n'
 };
 
-gulp.task('default', ['build','test']);
-gulp.task('build', ['scripts', 'styles']);
-gulp.task('test', ['build', 'karma']);
+var handleError = function (err) {
+  console.log(err.toString());
+  this.emit('end');
+};
 
-gulp.task('watch', ['build','karma-watch'], function() {
-  gulp.watch(['src/**/*.{js,html}'], ['build']);
+// Basic tasks
+gulp.task('clean', function() {
+  return del(['dist', 'temp']);
 });
 
-gulp.task('clean', function(cb) {
-  del(['dist', 'temp'], cb);
-});
-
-gulp.task('scripts', ['clean'], function() {
+gulp.task('scripts', gulp.series('clean', function() {
 
   var buildTemplates = function () {
     return gulp.src('src/**/*.html')
-      .pipe($.minifyHtml({
-             empty: true,
-             spare: true,
-             quotes: true
+      .pipe($.htmlmin({
+             removeEmptyAttributes: false,
+             removeEmptyElements: false,
+             collapseWhitespace: true,
+             conservativeCollapse: true,
+             keepClosingSlash: true
             }))
       .pipe($.angularTemplatecache({module: 'ui.select'}));
   };
@@ -72,9 +71,9 @@ gulp.task('scripts', ['clean'], function() {
     .pipe($.sourcemaps.write('./'))
     .pipe(gulp.dest('dist'));
 
-});
+}));
 
-gulp.task('styles', ['clean'], function() {
+gulp.task('styles', gulp.series('clean', function() {
 
   return gulp.src(['src/common.css'], {base: 'src'})
     .pipe($.sourcemaps.init())
@@ -83,19 +82,19 @@ gulp.task('styles', ['clean'], function() {
     }))
     .pipe($.concat('select.css'))
     .pipe(gulp.dest('dist'))
-    .pipe($.minifyCss())
+    .pipe($.cleanCss())
     .pipe($.concat('select.min.css'))
     .pipe($.sourcemaps.write('../dist', {debug: true}))
     .pipe(gulp.dest('dist'));
 
+}));
+
+gulp.task('karma', function(done) {
+  new karma.Server({configFile : __dirname +'/karma.conf.js', singleRun: true}, done).start();
 });
 
-gulp.task('karma', ['build'], function() {
-  karma.start({configFile : __dirname +'/karma.conf.js', singleRun: true});
-});
-
-gulp.task('karma-watch', ['build'], function() {
-  karma.start({configFile :  __dirname +'/karma.conf.js', singleRun: false});
+gulp.task('karma-watch', function(done) {
+  new karma.Server({configFile :  __dirname +'/karma.conf.js', singleRun: false}, done).start();
 });
 
 gulp.task('pull', function(done) {
@@ -152,16 +151,8 @@ gulp.task('tag', function() {
     .pipe($.tagVersion());
 });
 
-gulp.task('bump', function(done) {
-  runSequence('recommendedBump', 'changelog', 'add', 'commit', 'tag', 'push', done);
-});
-
-gulp.task('docs', function (cb) {
-  runSequence('docs:clean', 'docs:examples', 'docs:assets', 'docs:index', cb);
-});
-
-gulp.task('docs:clean', function (cb) {
-  del(['docs-built'], cb)
+gulp.task('docs:clean', function () {
+  return del(['docs-built']);
 });
 
 gulp.task('docs:assets', function () {
@@ -191,11 +182,15 @@ gulp.task('docs:index', function () {
     .pipe(gulp.dest('./docs-built/'));
 });
 
-gulp.task('docs:watch', ['docs'], function() {
-  gulp.watch(['docs/**/*.{js,html}'], ['docs']);
-});
-
-var handleError = function (err) {
-  console.log(err.toString());
-  this.emit('end');
-};
+// Composite tasks that reference other tasks - must be defined last
+gulp.task('build', gulp.parallel('scripts', 'styles'));
+gulp.task('test', gulp.series('build', 'karma'));
+gulp.task('default', gulp.series('build','test'));
+gulp.task('watch', gulp.series('build', 'karma-watch', function() {
+  gulp.watch(['src/**/*.{js,html}'], gulp.series('build'));
+}));
+gulp.task('bump', gulp.series('recommendedBump', 'changelog', 'add', 'commit', 'tag', 'push'));
+gulp.task('docs', gulp.series('docs:clean', 'docs:examples', 'docs:assets', 'docs:index'));
+gulp.task('docs:watch', gulp.series('docs', function() {
+  gulp.watch(['docs/**/*.{js,html}'], gulp.series('docs'));
+}));
