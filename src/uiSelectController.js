@@ -34,6 +34,9 @@ uis.controller('uiSelectCtrl',
   ctrl.disabled = false;
   ctrl.selected = undefined;
 
+  // Internal caches for performance
+  ctrl._disabledKeySet = null; // map-like object for O(1) disabled lookups when track-by is available
+
   ctrl.dropdownPosition = 'auto';
 
   ctrl.focusser = undefined; //Reference to input element used to handle focus events
@@ -359,6 +362,10 @@ uis.controller('uiSelectCtrl',
   }
 
   function _isItemDisabled(item) {
+    if (ctrl._disabledKeySet && ctrl.getItemKey && ctrl.parserResult && ctrl.parserResult.trackByExp) {
+      var k = ctrl.getItemKey(item);
+      return !!ctrl._disabledKeySet[k];
+    }
     return disabledItems.indexOf(item) > -1;
   }
 
@@ -375,7 +382,12 @@ uis.controller('uiSelectCtrl',
       if (item.isTag) return false;
 
       if (ctrl.multiple) {
-        isDisabled = _isItemSelected(item);
+        if (ctrl._disabledKeySet && ctrl.getItemKey && ctrl.parserResult && ctrl.parserResult.trackByExp) {
+          var key = ctrl.getItemKey(item);
+          isDisabled = !!ctrl._disabledKeySet[key];
+        } else {
+          isDisabled = _isItemSelected(item);
+        }
       }
 
       if (!isDisabled && angular.isDefined(ctrl.disableChoiceExpression)) {
@@ -387,6 +399,22 @@ uis.controller('uiSelectCtrl',
 
     return isDisabled;
   };
+
+  // Rebuild disabled key cache when selection changes (only useful when track-by is available)
+  $scope.$watchCollection(function () { return ctrl.selected; }, function () {
+    if (ctrl.getItemKey && ctrl.multiple && ctrl.parserResult && ctrl.parserResult.trackByExp) {
+      var set = Object.create(null);
+      if (angular.isArray(ctrl.selected)) {
+        for (var i = 0; i < ctrl.selected.length; i++) {
+          var k = ctrl.getItemKey(ctrl.selected[i]);
+          set[k] = true;
+        }
+      }
+      ctrl._disabledKeySet = set;
+    } else {
+      ctrl._disabledKeySet = null;
+    }
+  });
 
 
   // When the user selects an item with ENTER or clicks the dropdown

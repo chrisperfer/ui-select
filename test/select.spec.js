@@ -325,6 +325,32 @@ describe('ui-select tests', function () {
     expect(el.scope().$select.parserResult.trackByExp).toBe('person.email');
   });
 
+  it('should disable already selected items when remove-selected is false and track-by provided', function () {
+    var el = compileTemplate(
+      '<ui-select multiple remove-selected="false" ng-model="selection.selectedMultiple" track-by="person.email" theme="bootstrap" style="width: 800px;"> \
+        <ui-select-match placeholder="Pick one...">{{$item.name}} &lt;{{$item.email}}&gt;</ui-select-match> \
+        <ui-select-choices repeat="person in people | filter: $select.search"> \
+          <div class="person-name" ng-bind-html="person.name | highlight: $select.search"></div> \
+          <div ng-bind-html="person.email | highlight: $select.search"></div> \
+        </ui-select-choices> \
+      </ui-select>'
+    );
+
+    // Select two items
+    clickItem(el, 'Samantha');
+    clickItem(el, 'Adrian');
+
+    openDropdown(el);
+    var choicesEls = $(el).find('.ui-select-choices-row');
+    // Expect selected items (Adrian, Samantha) to be disabled in the list
+    var labels = ['Adam','Amalie','Estefanía','Adrian','Wladimir','Samantha','Nicole','Natasha'];
+    var expectedDisabled = [false, false, false, true, false, true, false, false];
+    labels.forEach(function (name, i) {
+      expect($(choicesEls[i]).find('.person-name').text()).toEqual(name);
+      expect($(choicesEls[i]).hasClass('disabled')).toEqual(expectedDisabled[i]);
+    });
+  });
+
   it('should prefer repeat\'s explicit track by over attribute track-by', function () {
     var el = compileTemplate(
       '<ui-select ng-model="selection.selected" track-by="person.email"> \
