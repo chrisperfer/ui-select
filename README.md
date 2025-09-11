@@ -55,6 +55,16 @@ Lightweight performance probes are included to track trends during optimization:
 - Run: `npm run bench`
 - Details: see PERF_BENCHMARKS.md for what is measured and how to adjust scale.
 
+### Performance Options (opt-in)
+
+- `track-by` (on `<ui-select>` or `<ui-select-choices>`): fallback key expression when the repeat lacks `track by ...`. Example: `track-by="person.id"`.
+- `search-debounce`: debounce local search refresh in ms (e.g., `search-debounce="150"`).
+- `visible-limit`: cap rendered items for ungrouped lists (e.g., `visible-limit="200"`).
+
+Notes
+- If `repeat` already includes `track by`, it takes precedence over the `track-by` attribute.
+- When `track-by` is present, disabled state checks leverage O(1) key lookups; behavior is preserved otherwise.
+
 ## Contributing
 
 - Check [CONTRIBUTING.md](/CONTRIBUTING.md)
