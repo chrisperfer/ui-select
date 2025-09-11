@@ -113,7 +113,8 @@ var uis = angular.module('ui.select', [])
   appendToBody: false,
   spinnerEnabled: false,
   spinnerClass: 'glyphicon glyphicon-refresh ui-select-spin',
-  backspaceReset: true
+  backspaceReset: true,
+  preserveArrayReference: false // Opt-in to preserve array reference on model updates
 })
 
 // See Rename minErr and make it accessible from outside https://github.com/angular/angular.js/issues/6913

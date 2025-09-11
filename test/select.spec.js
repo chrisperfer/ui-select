@@ -3191,6 +3191,94 @@ describe('ui-select tests', function () {
         expect(ctrl.selected.length).toEqual(0);
       });
     });
+
+    // Tests for preserveArrayReference configuration flag
+    describe('preserveArrayReference flag', function () {
+      var _prevPreserve;
+      beforeEach(inject(function (_uiSelectConfig_) {
+        _prevPreserve = _uiSelectConfig_.preserveArrayReference;
+        _uiSelectConfig_.preserveArrayReference = true;
+      }));
+      afterEach(inject(function (_uiSelectConfig_) {
+        _uiSelectConfig_.preserveArrayReference = _prevPreserve === undefined ? false : _prevPreserve;
+      }));
+
+      it('should preserve model array identity across selections and removals when enabled', function () {
+        scope.modelValue = [];
+        var el = compileTemplate(
+          '<ui-select multiple ng-model="modelValue" theme="bootstrap" style="width: 800px;"> \
+                <ui-select-match placeholder="Pick one...">{{$item.name}} &lt;{{$item.email}}&gt;</ui-select-match> \
+                <ui-select-choices repeat="person in people | filter: $select.search"> \
+                  <div ng-bind-html="person.name | highlight: $select.search"></div> \
+                  <div ng-bind-html="person.email | highlight: $select.search"></div> \
+                </ui-select-choices> \
+            </ui-select>'
+        );
+
+        var $select = el.scope().$select;
+        var ngModel = el.scope().ngModel;
+
+        // First parse with one selected item
+        $select.selected = [scope.people[5]]; // Samantha
+        ngModel.$modelValue = scope.modelValue;
+        var result1 = ngModel.$parsers[0]();
+        expect(result1.map(function (x) { return x.name; })).toEqual(['Samantha']);
+
+        // Second parse with two selected items using same model reference
+        $select.selected = [scope.people[5], scope.people[3]]; // Samantha, Adrian
+        ngModel.$modelValue = result1; // reuse existing array
+        var result2 = ngModel.$parsers[0]();
+        expect(result2).toBe(result1);
+        expect(result2.map(function (x) { return x.name; })).toEqual(['Samantha', 'Adrian']);
+
+        // Third parse after removal preserves reference
+        $select.selected = [scope.people[3]]; // Adrian
+        ngModel.$modelValue = result2; // reuse same array
+        var result3 = ngModel.$parsers[0]();
+        expect(result3).toBe(result2);
+        expect(result3.map(function (x) { return x.name; })).toEqual(['Adrian']);
+      });
+    });
+
+    describe('default array identity behavior', function () {
+      var _prevPreserve;
+      beforeEach(inject(function (_uiSelectConfig_) {
+        _prevPreserve = _uiSelectConfig_.preserveArrayReference;
+        _uiSelectConfig_.preserveArrayReference = false;
+      }));
+      afterEach(inject(function (_uiSelectConfig_) {
+        _uiSelectConfig_.preserveArrayReference = _prevPreserve === undefined ? false : _prevPreserve;
+      }));
+
+      it('should not preserve model array identity by default', function () {
+        scope.modelValue = [];
+        var el = compileTemplate(
+          '<ui-select multiple ng-model="modelValue" theme="bootstrap" style="width: 800px;"> \
+                <ui-select-match placeholder="Pick one...">{{$item.name}} &lt;{{$item.email}}&gt;</ui-select-match> \
+                <ui-select-choices repeat="person in people | filter: $select.search"> \
+                  <div ng-bind-html="person.name | highlight: $select.search"></div> \
+                  <div ng-bind-html="person.email | highlight: $select.search"></div> \
+                </ui-select-choices> \
+            </ui-select>'
+        );
+
+        var $select = el.scope().$select;
+        var ngModel = el.scope().ngModel;
+
+        // First parse with one selected item
+        $select.selected = [scope.people[5]]; // Samantha
+        ngModel.$modelValue = scope.modelValue;
+        var result1 = ngModel.$parsers[0]();
+        expect(result1.map(function (x) { return x.name; })).toEqual(['Samantha']);
+
+        // Second parse with two selected items should create new array
+        $select.selected = [scope.people[5], scope.people[3]]; // Samantha, Adrian
+        ngModel.$modelValue = result1; // pass previous array
+        var result2 = ngModel.$parsers[0]();
+        expect(result2).not.toBe(result1);
+        expect(result2.map(function (x) { return x.name; })).toEqual(['Samantha', 'Adrian']);
+      });
+    });
   });
 
   it('should add an id to the search input field', function () {

@@ -50,7 +50,8 @@
     "title-case": "^1.1.2"
   },
   "scripts": {
-    "test": "gulp test"
+    "test": "gulp test",
+    "bench": "karma start karma.bench.conf.js --single-run"
   },
   "spm": {
     "main": "dist/select.js",

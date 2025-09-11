@@ -49,6 +49,12 @@ $ bower install angular-ui-select
 * `gulp watch` to watch src files to jshint, build and test when changed
 * `gulp docs` build docs and examples
 
+### Benchmarks
+
+Lightweight performance probes are included to track trends during optimization:
+- Run: `npm run bench`
+- Details: see PERF_BENCHMARKS.md for what is measured and how to adjust scale.
+
 ## Contributing
 
 - Check [CONTRIBUTING.md](/CONTRIBUTING.md)

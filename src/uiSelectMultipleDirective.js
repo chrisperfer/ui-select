@@ -1,4 +1,4 @@
-uis.directive('uiSelectMultiple', ['uiSelectMinErr','$timeout', function(uiSelectMinErr, $timeout) {
+uis.directive('uiSelectMultiple', ['uiSelectMinErr','$timeout','uiSelectConfig', function(uiSelectMinErr, $timeout, uiSelectConfig) {
   return {
     restrict: 'EA',
     require: ['^uiSelect', '^ngModel'],
@@ -89,12 +89,30 @@ uis.directive('uiSelectMultiple', ['uiSelectMinErr','$timeout', function(uiSelec
         var locals = {},
             result,
             resultMultiple = [];
+        
+        // Check if we should preserve the array reference
+        if (uiSelectConfig.preserveArrayReference && angular.isArray(ngModel.$modelValue)) {
+          resultMultiple = ngModel.$modelValue; // Reuse existing array
+          resultMultiple.length = 0; // Clear it
+        }
+        
         for (var j = $select.selected.length - 1; j >= 0; j--) {
           locals = {};
           locals[$select.parserResult.itemName] = $select.selected[j];
           result = $select.parserResult.modelMapper(scope, locals);
-          resultMultiple.unshift(result);
+          
+          if (uiSelectConfig.preserveArrayReference && angular.isArray(ngModel.$modelValue)) {
+            resultMultiple.push(result); // Push instead of unshift for better performance
+          } else {
+            resultMultiple.unshift(result); // Original behavior
+          }
         }
+        
+        // Reverse if we pushed (to maintain order)
+        if (uiSelectConfig.preserveArrayReference && angular.isArray(ngModel.$modelValue) && $select.selected.length > 0) {
+          resultMultiple.reverse();
+        }
+        
         return resultMultiple;
       });
 
