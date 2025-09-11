@@ -43,15 +43,8 @@ module.exports = function(config) {
     // Enable / disable watching file and executing tests whenever any file changes
     autoWatch: true,
 
-    // Start these browsers, currently available:
-    // - Chrome
-    // - ChromeCanary
-    // - Firefox
-    // - Opera
-    // - Safari (only Mac)
-    // - PhantomJS
-    // - IE (only Windows)
-    browsers: [process.env.TRAVIS ? 'Firefox' : 'Chrome'],
+    // Use headless locally; keep Firefox on Travis CI
+    browsers: [process.env.TRAVIS ? 'Firefox' : 'ChromeHeadless'],
 
     // Continuous Integration mode
     // if true, it capture browsers, run tests and exit

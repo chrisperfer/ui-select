@@ -22,8 +22,7 @@ module.exports = function(config) {
     port: 9876,
     logLevel: config.LOG_INFO,
     autoWatch: false,
-    browsers: [process.env.TRAVIS ? 'Firefox' : 'Chrome'],
+    browsers: [process.env.TRAVIS ? 'Firefox' : 'ChromeHeadless'],
     singleRun: true
   });
 };
-
