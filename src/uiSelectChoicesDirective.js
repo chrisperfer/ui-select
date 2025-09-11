@@ -1,6 +1,6 @@
 uis.directive('uiSelectChoices',
-  ['uiSelectConfig', 'uisRepeatParser', 'uiSelectMinErr', '$compile', '$window',
-  function(uiSelectConfig, RepeatParser, uiSelectMinErr, $compile, $window) {
+  ['uiSelectConfig', 'uisRepeatParser', 'uiSelectMinErr', '$compile', '$window', '$parse',
+  function(uiSelectConfig, RepeatParser, uiSelectMinErr, $compile, $window, $parse) {
 
   return {
     restrict: 'EA',
@@ -32,6 +32,12 @@ uis.directive('uiSelectChoices',
 
       var parserResult = RepeatParser.parse(tAttrs.repeat);
 
+      // If no explicit track by in repeat, allow attribute-level fallback
+      var parentTrackBy = tElement.parent().attr('track-by');
+      if (!parserResult.trackByExp && (tAttrs.trackBy || parentTrackBy)) {
+        parserResult.trackByExp = tAttrs.trackBy || parentTrackBy;
+      }
+
       var choices = tElement.querySelectorAll('.ui-select-choices-row');
       if (choices.length !== 1) {
         throw uiSelectMinErr('rows', "Expected 1 .ui-select-choices-row but got '{0}'.", choices.length);
@@ -55,6 +61,24 @@ uis.directive('uiSelectChoices',
 
 
         $select.parseRepeatAttr(attrs.repeat, groupByExp, groupFilterExp); //Result ready at $select.parserResult
+        // Apply track-by fallback when repeat lacks it
+        if (!$select.parserResult.trackByExp) {
+          var tbAttr = attrs.trackBy || $select.$element.attr('track-by');
+          if (tbAttr) {
+            $select.parserResult.trackByExp = tbAttr;
+          }
+        }
+        // Expose a key function for downstream performance features
+        if ($select.parserResult.trackByExp) {
+          var keyGetter = $parse($select.parserResult.trackByExp);
+          $select.getItemKey = function(item) {
+            var locals = {};
+            locals[$select.parserResult.itemName] = item;
+            return keyGetter(scope, locals);
+          };
+        } else {
+          $select.getItemKey = function(item) { return item; };
+        }
         $select.disableChoiceExpression = attrs.uiDisableChoice;
         $select.onHighlightCallback = attrs.onHighlight;
         $select.minimumInputLength = parseInt(attrs.minimumInputLength) || 0;

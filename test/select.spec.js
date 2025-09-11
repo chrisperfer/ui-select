@@ -299,6 +299,45 @@ describe('ui-select tests', function () {
 
   });
 
+  it('should use track-by attribute from ui-select when repeat has no track by', function () {
+    var el = compileTemplate(
+      '<ui-select ng-model="selection.selected" track-by="person.email"> \
+        <ui-select-match placeholder="Pick one...">{{$select.selected.name}}</ui-select-match> \
+        <ui-select-choices repeat="person in people | filter: $select.search"> \
+          <div ng-bind-html="person.name | highlight: $select.search"></div> \
+          <div ng-bind-html="person.email | highlight: $select.search"></div> \
+        </ui-select-choices> \
+      </ui-select>'
+    );
+    expect(el.scope().$select.parserResult.trackByExp).toBe('person.email');
+  });
+
+  it('should use track-by attribute on choices when repeat has no track by', function () {
+    var el = compileTemplate(
+      '<ui-select ng-model="selection.selected"> \
+        <ui-select-match placeholder="Pick one...">{{$select.selected.name}}</ui-select-match> \
+        <ui-select-choices track-by="person.email" repeat="person in people | filter: $select.search"> \
+          <div ng-bind-html="person.name | highlight: $select.search"></div> \
+          <div ng-bind-html="person.email | highlight: $select.search"></div> \
+        </ui-select-choices> \
+      </ui-select>'
+    );
+    expect(el.scope().$select.parserResult.trackByExp).toBe('person.email');
+  });
+
+  it('should prefer repeat\'s explicit track by over attribute track-by', function () {
+    var el = compileTemplate(
+      '<ui-select ng-model="selection.selected" track-by="person.email"> \
+        <ui-select-match placeholder="Pick one...">{{$select.selected.name}}</ui-select-match> \
+        <ui-select-choices repeat="person in people | filter: $select.search track by person.name"> \
+          <div ng-bind-html="person.name | highlight: $select.search"></div> \
+          <div ng-bind-html="person.email | highlight: $select.search"></div> \
+        </ui-select-choices> \
+      </ui-select>'
+    );
+    expect(el.scope().$select.parserResult.trackByExp).toBe('person.name');
+  });
+
   it('should parse simple repeat syntax', function () {
 
     var locals = {};
