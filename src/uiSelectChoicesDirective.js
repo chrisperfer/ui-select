@@ -1,6 +1,6 @@
 uis.directive('uiSelectChoices',
-  ['uiSelectConfig', 'uisRepeatParser', 'uiSelectMinErr', '$compile', '$window', '$parse',
-  function(uiSelectConfig, RepeatParser, uiSelectMinErr, $compile, $window, $parse) {
+  ['uiSelectConfig', 'uisRepeatParser', 'uiSelectMinErr', '$compile', '$window', '$parse', '$$uisDebounce',
+  function(uiSelectConfig, RepeatParser, uiSelectMinErr, $compile, $window, $parse, $$uisDebounce) {
 
   return {
     restrict: 'EA',
@@ -82,9 +82,20 @@ uis.directive('uiSelectChoices',
         $select.disableChoiceExpression = attrs.uiDisableChoice;
         $select.onHighlightCallback = attrs.onHighlight;
         $select.minimumInputLength = parseInt(attrs.minimumInputLength) || 0;
+        var parentSearchDebounce = $select.$element && $select.$element.attr('search-debounce');
+        var sdValue = angular.isDefined(attrs.searchDebounce) ? attrs.searchDebounce : parentSearchDebounce;
+        $select.searchDebounce = angular.isDefined(sdValue) ? parseInt(scope.$eval(sdValue)) : uiSelectConfig.searchDebounce;
+
+        var parentVisibleLimit = $select.$element && $select.$element.attr('visible-limit');
+        var vlValue = angular.isDefined(attrs.visibleLimit) ? attrs.visibleLimit : parentVisibleLimit;
+        $select.visibleLimit = angular.isDefined(vlValue) ? parseInt(scope.$eval(vlValue)) : undefined;
+        if (!isNaN($select.visibleLimit) && $select.visibleLimit > 0) {
+          if ($select.refreshItems) { $select.refreshItems(); }
+        }
         $select.dropdownPosition = attrs.position ? attrs.position.toLowerCase() : uiSelectConfig.dropdownPosition;
 
-        scope.$watch('$select.search', function(newValue) {
+        var onSearchChanged = function() {
+          var newValue = $select.search;
           if(newValue && !$select.open && $select.multiple) $select.activate(false, true);
           $select.activeIndex = $select.tagging.isActivated ? -1 : 0;
           if (!attrs.minimumInputLength || $select.search.length >= attrs.minimumInputLength) {
@@ -92,7 +103,16 @@ uis.directive('uiSelectChoices',
           } else {
             $select.items = [];
           }
-        });
+        };
+
+        if ($select.searchDebounce && $select.searchDebounce > 0) {
+          var debounced = $$uisDebounce(function() {
+            scope.$evalAsync(onSearchChanged);
+          }, $select.searchDebounce);
+          scope.$watch('$select.search', function() { debounced(); });
+        } else {
+          scope.$watch('$select.search', function() { onSearchChanged(); });
+        }
 
         attrs.$observe('refreshDelay', function() {
           // $eval() is needed otherwise we get a string instead of a number

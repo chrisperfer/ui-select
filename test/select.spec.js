@@ -364,6 +364,49 @@ describe('ui-select tests', function () {
     expect(el.scope().$select.parserResult.trackByExp).toBe('person.name');
   });
 
+  it('should debounce search refresh when search-debounce is set', function () {
+    var el = compileTemplate(
+      '<ui-select ng-model="selection.selected" search-debounce="50"> \
+        <ui-select-match placeholder="Pick one...">{{$select.selected.name}}</ui-select-match> \
+        <ui-select-choices repeat="person in people | filter: $select.search"> \
+          <div ng-bind-html="person.name | highlight: $select.search"></div> \
+          <div ng-bind-html="person.email | highlight: $select.search"></div> \
+        </ui-select-choices> \
+      </ui-select>'
+    );
+    var $select = el.scope().$select;
+    spyOn($select, 'refresh').and.callThrough();
+    var initial = $select.refresh.calls.count();
+
+    // Trigger multiple quick search updates
+    $select.search = 'a';
+    scope.$digest();
+    $select.search = 'ab';
+    scope.$digest();
+
+    // Nothing new yet, debounce pending
+    expect($select.refresh.calls.count()).toBe(initial);
+    // Flush debounce timers
+    $timeout.flush();
+    expect($select.refresh.calls.count()).toBe(initial + 1);
+  });
+
+  it('should limit visible items when visible-limit is set (ungrouped)', function () {
+    var el = compileTemplate(
+      '<ui-select ng-model="selection.selected" visible-limit="3"> \
+        <ui-select-match placeholder="Pick one...">{{$select.selected.name}}</ui-select-match> \
+        <ui-select-choices repeat="person in people | filter: $select.search"> \
+          <div class="person-name" ng-bind-html="person.name | highlight: $select.search"></div> \
+          <div ng-bind-html="person.email | highlight: $select.search"></div> \
+        </ui-select-choices> \
+      </ui-select>'
+    );
+
+    openDropdown(el);
+    var choicesEls = $(el).find('.ui-select-choices-row');
+    expect(choicesEls.length).toBe(3);
+  });
+
   it('should parse simple repeat syntax', function () {
 
     var locals = {};

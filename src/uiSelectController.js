@@ -265,6 +265,9 @@ uis.controller('uiSelectCtrl',
           ctrl.setItemsFn(filteredItems);
         }
       }
+      if (!ctrl.isGrouped && angular.isNumber(ctrl.visibleLimit) && ctrl.visibleLimit > 0 && angular.isArray(ctrl.items)) {
+        ctrl.items = ctrl.items.slice(0, ctrl.visibleLimit);
+      }
       if (ctrl.dropdownPosition === 'auto' || ctrl.dropdownPosition === 'up'){
         $scope.calculateDropdownPos();
       }
