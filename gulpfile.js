@@ -31,7 +31,7 @@ gulp.task('clean', function() {
 gulp.task('scripts', function() {
 
   var buildTemplates = function () {
-    return gulp.src('src/**/*.html')
+    return gulp.src('src/**/*.html', { base: 'src' })
       .pipe($.htmlmin({
              removeEmptyAttributes: false,
              removeEmptyElements: false,
@@ -39,7 +39,23 @@ gulp.task('scripts', function() {
              conservativeCollapse: true,
              keepClosingSlash: true
             }))
-      .pipe($.angularTemplatecache({module: 'ui.select'}));
+      // Ensure template cache keys match directive templateUrl (no leading slash)
+      .pipe($.angularTemplatecache({
+        module: 'ui.select',
+        root: '',
+        transformUrl: function(url) {
+          // Normalize to theme-relative path, e.g. 'bootstrap/select.tpl.html'
+          // Strip everything up to and including '/ui-select/' (repo root) if present
+          var idx = url.lastIndexOf('/ui-select/');
+          if (idx === -1) idx = url.lastIndexOf('\\ui-select\\'); // Windows path
+          if (idx !== -1) {
+            url = url.substring(idx + '/ui-select/'.length);
+          }
+          // Also strip an optional leading slash
+          url = url.replace(/^\//, '');
+          return url;
+        }
+      }));
   };
 
   var buildLib = function(){
