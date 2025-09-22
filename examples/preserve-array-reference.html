@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en" ng-app="demo">
+<head>
+  <meta charset="utf-8">
+  <title>AngularJS ui-select - Preserve Array Reference Example</title>
+  
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.2/angular.js"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.2/angular-sanitize.js"></script>
+  
+  <script src="../dist/select.js"></script>
+  <link rel="stylesheet" href="../dist/select.css">
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.7/css/bootstrap.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/3.4.5/select2.css">
+  
+  <style>
+    body {
+      padding: 15px;
+    }
+    .demo-section {
+      margin: 20px 0;
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .array-info {
+      margin-top: 10px;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+    .array-info.changed {
+      background: #ffeeee;
+    }
+    .array-info.preserved {
+      background: #eeffee;
+    }
+    .btn-group {
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container" ng-controller="DemoCtrl">
+    <h1>Preserve Array Reference Example</h1>
+    
+    <p>This example demonstrates the new <code>preserveArrayReference</code> configuration option that prevents the array from being recreated on every model update.</p>
+    
+    <div class="btn-group">
+      <button class="btn btn-default" ng-class="{active: !preserveArrayReference}" ng-click="setPreserveArrayReference(false)">
+        Default Behavior (Array Recreated)
+      </button>
+      <button class="btn btn-success" ng-class="{active: preserveArrayReference}" ng-click="setPreserveArrayReference(true)">
+        Preserve Array Reference
+      </button>
+    </div>
+    
+    <div class="demo-section">
+      <h3>Configuration Status</h3>
+      <p>
+        <strong>preserveArrayReference:</strong> 
+        <span class="label" ng-class="preserveArrayReference ? 'label-success' : 'label-default'">
+          {{preserveArrayReference}}
+        </span>
+      </p>
+    </div>
+    
+    <div class="demo-section">
+      <h3>Multi-Select Example</h3>
+      
+      <ui-select multiple ng-model="selectedPeople" theme="bootstrap" style="width: 100%;">
+        <ui-select-match placeholder="Select people...">
+          {{$item.name}} &lt;{{$item.email}}&gt;
+        </ui-select-match>
+        <ui-select-choices repeat="person in people | filter: $select.search">
+          <div ng-bind-html="person.name | highlight: $select.search"></div>
+          <small>
+            email: <span ng-bind-html="person.email | highlight: $select.search"></span>
+          </small>
+        </ui-select-choices>
+      </ui-select>
+      
+      <div class="array-info" ng-class="arrayReferenceChanged ? 'changed' : 'preserved'">
+        <strong>Array Reference ID:</strong> {{arrayReferenceId}}<br>
+        <strong>Array Reference Changed:</strong> {{arrayReferenceChanged}}<br>
+        <strong>Change Count:</strong> {{changeCount}}<br>
+        <strong>Selected Items:</strong> {{selectedPeople.length}}
+      </div>
+      
+      <div style="margin-top: 10px;">
+        <h4>Selected People:</h4>
+        <ul>
+          <li ng-repeat="person in selectedPeople">
+            {{person.name}} - {{person.email}}
+          </li>
+        </ul>
+      </div>
+    </div>
+    
+    <div class="demo-section">
+      <h3>How It Works</h3>
+      <ul>
+        <li>When <code>preserveArrayReference</code> is <strong>false</strong> (default), removing an item creates a new array (you'll see the Array Reference ID change)</li>
+        <li>When <code>preserveArrayReference</code> is <strong>true</strong>, the same array is reused and modified in place (Array Reference ID stays the same)</li>
+        <li>This can significantly improve performance and prevent side effects in parent components that rely on array identity</li>
+      </ul>
+    </div>
+  </div>
+  
+  <script>
+    angular.module('demo', ['ngSanitize', 'ui.select'])
+    
+    .config(function(uiSelectConfig) {
+      // Initially set to false to show the difference
+      uiSelectConfig.preserveArrayReference = false;
+    })
+    
+    .controller('DemoCtrl', function($scope, uiSelectConfig) {
+      $scope.preserveArrayReference = uiSelectConfig.preserveArrayReference;
+      
+      $scope.people = [
+        { name: 'Adam', email: 'adam@email.com', age: 12, country: 'United States' },
+        { name: 'Amalie', email: 'amalie@email.com', age: 12, country: 'Argentina' },
+        { name: 'Estefanía', email: 'estefania@email.com', age: 21, country: 'Argentina' },
+        { name: 'Adrian', email: 'adrian@email.com', age: 21, country: 'Ecuador' },
+        { name: 'Wladimir', email: 'wladimir@email.com', age: 30, country: 'Ecuador' },
+        { name: 'Samantha', email: 'samantha@email.com', age: 30, country: 'United States' },
+        { name: 'Nicole', email: 'nicole@email.com', age: 43, country: 'Colombia' },
+        { name: 'Natasha', email: 'natasha@email.com', age: 54, country: 'Ecuador' },
+        { name: 'Michael', email: 'michael@email.com', age: 15, country: 'Colombia' },
+        { name: 'Nicolás', email: 'nicolas@email.com', age: 43, country: 'Colombia' }
+      ];
+      
+      $scope.selectedPeople = [];
+      
+      // Track array reference
+      var lastArrayReference = $scope.selectedPeople;
+      $scope.arrayReferenceId = generateId($scope.selectedPeople);
+      $scope.arrayReferenceChanged = false;
+      $scope.changeCount = 0;
+      
+      // Generate a unique ID for an array reference
+      function generateId(arr) {
+        return 'ref_' + Math.random().toString(36).substr(2, 9);
+      }
+      
+      // Watch for array reference changes
+      $scope.$watch('selectedPeople', function(newVal, oldVal) {
+        if (newVal !== lastArrayReference) {
+          $scope.arrayReferenceChanged = true;
+          $scope.arrayReferenceId = generateId(newVal);
+          $scope.changeCount++;
+          lastArrayReference = newVal;
+        } else {
+          $scope.arrayReferenceChanged = false;
+        }
+      });
+      
+      // Toggle preserve array reference setting
+      $scope.setPreserveArrayReference = function(value) {
+        uiSelectConfig.preserveArrayReference = value;
+        $scope.preserveArrayReference = value;
+        
+        // Reset tracking
+        $scope.changeCount = 0;
+        lastArrayReference = $scope.selectedPeople;
+        $scope.arrayReferenceId = generateId($scope.selectedPeople);
+      };
+    });
+  </script>
+</body>
+</html>
