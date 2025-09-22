@@ -28,7 +28,7 @@ gulp.task('clean', function() {
   return del(['dist', 'temp']);
 });
 
-gulp.task('scripts', gulp.series('clean', function() {
+gulp.task('scripts', function() {
 
   var buildTemplates = function () {
     return gulp.src('src/**/*.html')
@@ -71,9 +71,9 @@ gulp.task('scripts', gulp.series('clean', function() {
     .pipe($.sourcemaps.write('./'))
     .pipe(gulp.dest('dist'));
 
-}));
+});
 
-gulp.task('styles', gulp.series('clean', function() {
+gulp.task('styles', function() {
 
   return gulp.src(['src/common.css'], {base: 'src'})
     .pipe($.sourcemaps.init())
@@ -87,7 +87,13 @@ gulp.task('styles', gulp.series('clean', function() {
     .pipe($.sourcemaps.write('../dist', {debug: true}))
     .pipe(gulp.dest('dist'));
 
-}));
+});
+
+// Copy raw HTML templates to dist/templates for consumers that prefer file-based templates
+gulp.task('templates', function () {
+  return gulp.src('src/**/*.html', { base: 'src' })
+    .pipe(gulp.dest('dist/templates'));
+});
 
 gulp.task('karma', function(done) {
   new karma.Server({configFile : __dirname +'/karma.conf.js', singleRun: true}, done).start();
@@ -156,7 +162,7 @@ gulp.task('docs:clean', function () {
 });
 
 gulp.task('docs:assets', function () {
-  gulp.src('./dist/*').pipe(gulp.dest('./docs-built/dist'));
+  gulp.src('./dist/**').pipe(gulp.dest('./docs-built/dist'));
   return gulp.src('docs/assets/*').pipe(gulp.dest('./docs-built/assets'));
 });
 
@@ -183,7 +189,7 @@ gulp.task('docs:index', function () {
 });
 
 // Composite tasks that reference other tasks - must be defined last
-gulp.task('build', gulp.parallel('scripts', 'styles'));
+gulp.task('build', gulp.series('clean', gulp.parallel('scripts', 'styles', 'templates')));
 gulp.task('test', gulp.series('build', 'karma'));
 gulp.task('default', gulp.series('build','test'));
 gulp.task('watch', gulp.series('build', 'karma-watch', function() {
