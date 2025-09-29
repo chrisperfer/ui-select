@@ -1,7 +1,7 @@
 /*!
  * ui-select
  * http://github.com/angular-ui/ui-select
- * Version: 0.19.8 - 2025-09-22T15:14:15.217Z
+ * Version: 0.21.0 - 2025-09-29T08:29:22.565Z
  * License: MIT
  */
 
@@ -117,7 +117,7 @@ var uis = angular.module('ui.select', [])
   dropdownPosition: 'auto',
   removeSelected: true,
   resetSearchInput: true,
-  searchDebounce: 0,
+  searchDebounce: 200, // Default 200ms debounce for better performance
   generateId: function() {
     return latestId++;
   },
@@ -125,7 +125,12 @@ var uis = angular.module('ui.select', [])
   spinnerEnabled: false,
   spinnerClass: 'glyphicon glyphicon-refresh ui-select-spin',
   backspaceReset: true,
-  preserveArrayReference: false // Opt-in to preserve array reference on model updates
+  preserveArrayReference: false, // Opt-in to preserve array reference on model updates
+  // Performance: search-time caps (opt-in)
+  visibleLimitWhenSearching: undefined,
+  visibleLimitWhenSearchingStep: 100,
+  groupVisibleLimitWhenSearching: undefined,
+  groupVisibleLimitWhenSearchingStep: 50
 })
 
 // See Rename minErr and make it accessible from outside https://github.com/angular/angular.js/issues/6913
@@ -280,10 +285,25 @@ uis.directive('uiSelectChoices',
         if (!isNaN($select.visibleLimit) && $select.visibleLimit > 0) {
           if ($select.refreshItems) { $select.refreshItems(); }
         }
+
+        // New: limit total visible items while searching (works for grouped and ungrouped)
+        var parentVisibleLimitWhenSearching = $select.$element && $select.$element.attr('visible-limit-when-searching');
+        var vlwsValue = angular.isDefined(attrs.visibleLimitWhenSearching) ? attrs.visibleLimitWhenSearching : parentVisibleLimitWhenSearching;
+        $select.visibleLimitWhenSearching = angular.isDefined(vlwsValue) ? parseInt(scope.$eval(vlwsValue)) : uiSelectConfig.visibleLimitWhenSearching;
+        if (!isNaN($select.visibleLimitWhenSearching) && $select.visibleLimitWhenSearching > 0) {
+          if ($select.refreshItems) { $select.refreshItems(); }
+        }
         $select.dropdownPosition = attrs.position ? attrs.position.toLowerCase() : uiSelectConfig.dropdownPosition;
 
+        var lastSearch;
         var onSearchChanged = function() {
           var newValue = $select.search;
+          // Reset current caps when search text changes
+          if (newValue !== lastSearch) {
+            $select._currentVisibleLimitWhenSearching = $select.visibleLimitWhenSearching;
+            $select._groupCurrentVisibleLimit = {};
+            lastSearch = newValue;
+          }
           if(newValue && !$select.open && $select.multiple) $select.activate(false, true);
           $select.activeIndex = $select.tagging.isActivated ? -1 : 0;
           if (!attrs.minimumInputLength || $select.search.length >= attrs.minimumInputLength) {
@@ -307,6 +327,45 @@ uis.directive('uiSelectChoices',
           var refreshDelay = scope.$eval(attrs.refreshDelay);
           $select.refreshDelay = refreshDelay !== undefined ? refreshDelay : uiSelectConfig.refreshDelay;
         });
+
+        // Optional: step for show-more while searching (global)
+        var parentVlwsStep = $select.$element && $select.$element.attr('visible-limit-when-searching-step');
+        var vlwsStepValue = angular.isDefined(attrs.visibleLimitWhenSearchingStep) ? attrs.visibleLimitWhenSearchingStep : parentVlwsStep;
+        var stepDefault = uiSelectConfig.visibleLimitWhenSearchingStep;
+        $select.visibleLimitWhenSearchingStep = angular.isDefined(vlwsStepValue) ? parseInt(scope.$eval(vlwsStepValue)) : stepDefault;
+
+        // Expose a helper to increase current global cap when searching
+        $select.showMore = function(step) {
+          var inc = angular.isNumber(step) ? step : $select.visibleLimitWhenSearchingStep;
+          var base = angular.isNumber($select._currentVisibleLimitWhenSearching) ? $select._currentVisibleLimitWhenSearching : ($select.visibleLimitWhenSearching || 0);
+          $select._currentVisibleLimitWhenSearching = base + inc;
+          if ($select.refreshItems) { $select.refreshItems(); }
+        };
+
+        // Per-group variant: parse limits and step
+        var parentGroupVl = $select.$element && $select.$element.attr('group-visible-limit-when-searching');
+        var groupVlValue = angular.isDefined(attrs.groupVisibleLimitWhenSearching) ? attrs.groupVisibleLimitWhenSearching : parentGroupVl;
+        $select.groupVisibleLimitWhenSearching = angular.isDefined(groupVlValue) ? parseInt(scope.$eval(groupVlValue)) : uiSelectConfig.groupVisibleLimitWhenSearching;
+
+        var parentGroupStep = $select.$element && $select.$element.attr('group-visible-limit-when-searching-step');
+        var groupStepValue = angular.isDefined(attrs.groupVisibleLimitWhenSearchingStep) ? attrs.groupVisibleLimitWhenSearchingStep : parentGroupStep;
+        var groupStepDefault = uiSelectConfig.groupVisibleLimitWhenSearchingStep;
+        $select.groupVisibleLimitWhenSearchingStep = angular.isDefined(groupStepValue) ? parseInt(scope.$eval(groupStepValue)) : groupStepDefault;
+
+        // Map of per-group current limits (by group name)
+        $select._groupCurrentVisibleLimit = {};
+
+        // Expose per-group show more
+        $select.showMoreGroup = function(groupName, step) {
+          if (!groupName) return;
+          var inc = angular.isNumber(step) ? step : $select.groupVisibleLimitWhenSearchingStep;
+          var curr = $select._groupCurrentVisibleLimit[groupName];
+          if (!angular.isNumber(curr)) {
+            curr = angular.isNumber($select.groupVisibleLimitWhenSearching) ? $select.groupVisibleLimitWhenSearching : 0;
+          }
+          $select._groupCurrentVisibleLimit[groupName] = curr + inc;
+          if ($select.refreshItems) { $select.refreshItems(); }
+        };
 
         scope.$watch('$select.open', function(open) {
           if (open) {
@@ -588,9 +647,88 @@ uis.controller('uiSelectCtrl',
           ctrl.setItemsFn(filteredItems);
         }
       }
+      // Legacy: cap for ungrouped lists (existing behavior)
       if (!ctrl.isGrouped && angular.isNumber(ctrl.visibleLimit) && ctrl.visibleLimit > 0 && angular.isArray(ctrl.items)) {
         ctrl.items = ctrl.items.slice(0, ctrl.visibleLimit);
       }
+
+      // Capture count before applying search-time cap
+      var preCapCount = angular.isArray(ctrl.items) ? ctrl.items.length : 0;
+      if (ctrl.isGrouped && angular.isArray(ctrl.groups)) {
+        preCapCount = 0;
+        for (var pci = 0; pci < ctrl.groups.length; pci++) {
+          preCapCount += (ctrl.groups[pci].items && ctrl.groups[pci].items.length) ? ctrl.groups[pci].items.length : 0;
+        }
+      }
+
+      // New: cap visible items while searching (two modes: per-group or global)
+      if (ctrl.search && ctrl.search.length > 0) {
+        var appliedCap = false;
+        if (ctrl.isGrouped && angular.isArray(ctrl.groups) && angular.isNumber(ctrl.groupVisibleLimitWhenSearching) && ctrl.groupVisibleLimitWhenSearching > 0) {
+          // Per-group cap
+          var newGroups = [];
+          for (var ggi = 0; ggi < ctrl.groups.length; ggi++) {
+            var gg = ctrl.groups[ggi];
+            var glimit = ctrl._groupCurrentVisibleLimit && angular.isNumber(ctrl._groupCurrentVisibleLimit[gg.name]) ?
+              ctrl._groupCurrentVisibleLimit[gg.name] : ctrl.groupVisibleLimitWhenSearching;
+            var gcount = (gg.items && gg.items.length) ? gg.items.length : 0;
+            var gtake = Math.max(Math.min(glimit, gcount), 0);
+            var gtruncated = gcount > gtake;
+            var gremaining = gtruncated ? (gcount - gtake) : 0;
+            newGroups.push({ name: gg.name, items: gg.items.slice(0, gtake), _truncated: gtruncated, _remaining: gremaining });
+          }
+          ctrl.groups = newGroups;
+          // Rebuild items
+          ctrl.items = [];
+          ctrl.groups.forEach(function(group) { ctrl.items = ctrl.items.concat(group.items); });
+          appliedCap = true;
+        }
+
+        if (!appliedCap) {
+          // Global cap
+          var effectiveLimit = (angular.isNumber(ctrl._currentVisibleLimitWhenSearching) && ctrl._currentVisibleLimitWhenSearching > 0) ?
+            ctrl._currentVisibleLimitWhenSearching : ctrl.visibleLimitWhenSearching;
+          if (angular.isNumber(effectiveLimit) && effectiveLimit > 0) {
+            var remaining = effectiveLimit;
+            if (ctrl.isGrouped && angular.isArray(ctrl.groups)) {
+              var limitedGroups = [];
+              for (var gi = 0; gi < ctrl.groups.length && remaining > 0; gi++) {
+                var g = ctrl.groups[gi];
+                var take = Math.min(remaining, (g.items && g.items.length) ? g.items.length : 0);
+                if (take > 0) {
+                  limitedGroups.push({ name: g.name, items: g.items.slice(0, take) });
+                  remaining -= take;
+                }
+              }
+              ctrl.groups = limitedGroups;
+              // Rebuild items from limited groups
+              ctrl.items = [];
+              ctrl.groups.forEach(function(group) { ctrl.items = ctrl.items.concat(group.items); });
+            } else if (!ctrl.isGrouped && angular.isArray(ctrl.items)) {
+              ctrl.items = ctrl.items.slice(0, remaining);
+            }
+          }
+        }
+      }
+      // Compute remaining and whether truncated for show-more UI
+      var postCapCount = angular.isArray(ctrl.items) ? ctrl.items.length : 0;
+      ctrl.remainingCountWhenSearching = (ctrl.search && ctrl.search.length > 0) ? Math.max(preCapCount - postCapCount, 0) : 0;
+      ctrl.truncatedWhileSearching = ctrl.remainingCountWhenSearching > 0;
+
+      // Pre-compute disabled states for all items for O(1) lookup in templates
+      if (ctrl.disableChoiceExpression && ctrl.items && ctrl.items.length && ctrl.parserResult) {
+        ctrl._itemDisabledFlags = {};
+        var disableChoiceExpGetter = $parse(ctrl.disableChoiceExpression);
+        ctrl.items.forEach(function(item) {
+          var key = ctrl.getItemKey ? ctrl.getItemKey(item) : item;
+          var locals = {};
+          locals[ctrl.parserResult.itemName] = item;
+          ctrl._itemDisabledFlags[key] = disableChoiceExpGetter($scope, locals);
+        });
+      } else {
+        ctrl._itemDisabledFlags = null;
+      }
+
       if (ctrl.dropdownPosition === 'auto' || ctrl.dropdownPosition === 'up'){
         $scope.calculateDropdownPos();
       }
@@ -598,7 +736,7 @@ uis.controller('uiSelectCtrl',
     };
 
     // See https://github.com/angular/angular.js/blob/v1.2.15/src/ng/directive/ngRepeat.js#L259
-    $scope.$watchCollection(ctrl.parserResult.source, function(items) {
+  $scope.$watchCollection(ctrl.parserResult.source, function(items) {
       if (items === undefined || items === null) {
         // If the user specifies undefined or null => reset the collection
         // Special case: items can be undefined if the user did not initialized the collection on the scope
@@ -717,7 +855,14 @@ uis.controller('uiSelectCtrl',
       }
 
       if (!isDisabled && angular.isDefined(ctrl.disableChoiceExpression)) {
-        isDisabled = !!(itemScope.$eval(ctrl.disableChoiceExpression));
+        // Use pre-computed cache if available for O(1) lookup
+        if (ctrl._itemDisabledFlags) {
+          var itemKey = ctrl.getItemKey ? ctrl.getItemKey(item) : item;
+          isDisabled = !!ctrl._itemDisabledFlags[itemKey];
+        } else {
+          // Fallback to runtime evaluation if cache not available
+          isDisabled = !!(itemScope.$eval(ctrl.disableChoiceExpression));
+        }
       }
 
       _updateItemDisabled(item, isDisabled);
@@ -2644,7 +2789,7 @@ uis.service('uisRepeatParser', ['uiSelectMinErr','$parse', function(uiSelectMinE
 }]);
 
 }());
-angular.module("ui.select").run(["$templateCache", function($templateCache) {$templateCache.put("bootstrap/choices.tpl.html","<ul class=\"ui-select-choices ui-select-choices-content\"> <li class=\"ui-select-choices-group\" id=\"ui-select-choices-{{ $select.generatedId }}\"> <div class=\"divider\" ng-show=\"$select.isGrouped && $index > 0\"></div> <div ng-show=\"$select.isGrouped\" class=\"ui-select-choices-group-label dropdown-header\" ng-bind=\"$group.name\"></div> <div ng-attr-id=\"ui-select-choices-row-{{ $select.generatedId }}-{{$index}}\" class=\"ui-select-choices-row\" ng-class=\"{active: $index === $select.activeIndex, disabled: (($select._disabledKeySet && $select.multiple && !$select.removeSelected && $select.getItemKey && $select._disabledKeySet[$select.getItemKey(this[$select.itemProperty])]) || $select.isDisabled(this))}\" role=\"option\"> <span class=\"ui-select-choices-row-inner\"></span> </div> </li> </ul> ");
+angular.module("ui.select").run(["$templateCache", function($templateCache) {$templateCache.put("bootstrap/choices.tpl.html","<ul class=\"ui-select-choices ui-select-choices-content\"> <li class=\"ui-select-choices-group\" id=\"ui-select-choices-{{ $select.generatedId }}\"> <div class=\"divider\" ng-show=\"$select.isGrouped && $index > 0\"></div> <div ng-show=\"$select.isGrouped\" class=\"ui-select-choices-group-label dropdown-header\" ng-bind=\"$group.name\"></div> <div ng-attr-id=\"ui-select-choices-row-{{ $select.generatedId }}-{{$index}}\" class=\"ui-select-choices-row\" ng-class=\"{active: $index === $select.activeIndex, disabled: (($select._disabledKeySet && $select.multiple && !$select.removeSelected && $select.getItemKey && $select._disabledKeySet[$select.getItemKey(this[$select.itemProperty])]) || $select.isDisabled(this))}\" role=\"option\"> <span class=\"ui-select-choices-row-inner\"></span> </div> <div class=\"ui-select-group-more\" ng-if=\"$select.search && $group._truncated\"> <button type=\"button\" class=\"btn btn-link btn-xs\" ng-click=\"$select.showMoreGroup($group.name)\">Show more ({{$group._remaining}})</button> </div> </li> </ul> ");
 $templateCache.put("bootstrap/footer.tpl.html","<div class=\"ui-select-footer\" ng-transclude></div> ");
 $templateCache.put("bootstrap/header.tpl.html","<div class=\"ui-select-header\" ng-transclude></div> ");
 $templateCache.put("bootstrap/match-multiple.tpl.html","<span class=\"ui-select-match\"> <span ng-repeat=\"$item in $select.selected track by $index\"> <span class=\"ui-select-match-item btn btn-default btn-xs\" tabindex=\"-1\" type=\"button\" ng-disabled=\"$select.disabled\" ng-click=\"$selectMultiple.activeMatchIndex = $index;\" ng-class=\"{\'btn-primary\':$selectMultiple.activeMatchIndex === $index, \'select-locked\':$select.isLocked(this, $index)}\" ui-select-sort=\"$select.selected\"> <span class=\"close ui-select-match-close\" ng-hide=\"$select.disabled\" ng-click=\"$selectMultiple.removeChoice($index)\">&nbsp;&times;</span> <span uis-transclude-append></span> </span> </span> </span> ");
@@ -2652,7 +2797,7 @@ $templateCache.put("bootstrap/match.tpl.html","<div class=\"ui-select-match\" ng
 $templateCache.put("bootstrap/no-choice.tpl.html","<ul class=\"ui-select-no-choice dropdown-menu\" ng-show=\"$select.items.length == 0\"> <li ng-transclude> </li> </ul> ");
 $templateCache.put("bootstrap/select-multiple.tpl.html","<div class=\"ui-select-container ui-select-multiple ui-select-bootstrap dropdown form-control\" ng-class=\"{open: $select.open}\"> <div> <div class=\"ui-select-match\"></div> <span ng-show=\"$select.open && $select.refreshing && $select.spinnerEnabled\" class=\"ui-select-refreshing {{$select.spinnerClass}}\"></span> <input type=\"search\" autocomplete=\"off\" autocorrect=\"off\" autocapitalize=\"off\" spellcheck=\"false\" class=\"ui-select-search input-xs\" placeholder=\"{{$select.getPlaceholder()}}\" ng-disabled=\"$select.disabled\" ng-click=\"$select.activate()\" ng-model=\"$select.search\" role=\"combobox\" aria-expanded=\"{{$select.open}}\" aria-label=\"{{$select.baseTitle}}\" ng-class=\"{\'spinner\': $select.refreshing}\" data-disallow-drop=\"data-disallow-drop\"> </div> <div ng-show=\"$select.open && $select.items.length > 0\" class=\"ui-select-dropdown dropdown-menu\"> <div class=\"ui-select-header\"></div> <div class=\"ui-select-choices\"></div> <div class=\"ui-select-footer\"></div> </div> <div class=\"ui-select-no-choice\"></div> </div> ");
 $templateCache.put("bootstrap/select.tpl.html","<div class=\"ui-select-container ui-select-bootstrap dropdown\" ng-class=\"{open: $select.open}\"> <div class=\"ui-select-match\"></div> <span ng-show=\"$select.open && $select.refreshing  && $select.spinnerEnabled\" class=\"ui-select-refreshing {{$select.spinnerClass}}\"></span> <input type=\"search\" autocomplete=\"off\" tabindex=\"-1\" aria-expanded=\"true\" aria-label=\"{{ $select.baseTitle }}\" aria-owns=\"ui-select-choices-{{ $select.generatedId }}\" class=\"form-control ui-select-search\" ng-class=\"{ \'ui-select-search-hidden\' : !$select.searchEnabled }\" placeholder=\"{{$select.placeholder}}\" ng-model=\"$select.search\" ng-show=\"$select.open\"> <div ng-show=\"$select.open && $select.items.length > 0\" class=\"ui-select-dropdown dropdown-menu\"> <div class=\"ui-select-header\"></div> <div class=\"ui-select-choices\"></div> <div class=\"ui-select-footer\"></div> </div> <div class=\"ui-select-no-choice\"></div> </div> ");
-$templateCache.put("selectize/choices.tpl.html","<div class=\"ui-select-choices\"> <div class=\"ui-select-choices-content selectize-dropdown-content\"> <div class=\"ui-select-choices-group optgroup\"> <div ng-show=\"$select.isGrouped\" class=\"ui-select-choices-group-label optgroup-header\" ng-bind=\"$group.name\"></div> <div role=\"option\" class=\"ui-select-choices-row\" ng-class=\"{active: $index === $select.activeIndex, disabled: (($select._disabledKeySet && $select.multiple && !$select.removeSelected && $select.getItemKey && $select._disabledKeySet[$select.getItemKey(this[$select.itemProperty])]) || $select.isDisabled(this))}\"> <div class=\"option ui-select-choices-row-inner\" data-selectable></div> </div> </div> </div> </div> ");
+$templateCache.put("selectize/choices.tpl.html","<div class=\"ui-select-choices\"> <div class=\"ui-select-choices-content selectize-dropdown-content\"> <div class=\"ui-select-choices-group optgroup\"> <div ng-show=\"$select.isGrouped\" class=\"ui-select-choices-group-label optgroup-header\" ng-bind=\"$group.name\"></div> <div role=\"option\" class=\"ui-select-choices-row\" ng-class=\"{active: $index === $select.activeIndex, disabled: (($select._disabledKeySet && $select.multiple && !$select.removeSelected && $select.getItemKey && $select._disabledKeySet[$select.getItemKey(this[$select.itemProperty])]) || $select.isDisabled(this))}\"> <div class=\"option ui-select-choices-row-inner\" data-selectable></div> </div> <div class=\"ui-select-group-more\" ng-if=\"$select.search && $group._truncated\"> <a href=\"\" class=\"option\" ng-click=\"$select.showMoreGroup($group.name); $event.preventDefault();\">Show more ({{$group._remaining}})</a> </div> </div> </div> </div> ");
 $templateCache.put("selectize/footer.tpl.html","<div class=\"ui-select-footer\" ng-transclude></div> ");
 $templateCache.put("selectize/header.tpl.html","<div class=\"ui-select-header\" ng-transclude></div> ");
 $templateCache.put("selectize/match-multiple.tpl.html","<div class=\"ui-select-match\" data-value ng-repeat=\"$item in $select.selected track by $index\" ng-click=\"$selectMultiple.activeMatchIndex = $index;\" ng-class=\"{\'active\':$selectMultiple.activeMatchIndex === $index}\" ui-select-sort=\"$select.selected\"> <span class=\"ui-select-match-item\" ng-class=\"{\'select-locked\':$select.isLocked(this, $index)}\"> <span uis-transclude-append></span> <span class=\"remove ui-select-match-close\" ng-hide=\"$select.disabled\" ng-click=\"$selectMultiple.removeChoice($index)\">&times;</span> </span> </div>");
@@ -2660,7 +2805,7 @@ $templateCache.put("selectize/match.tpl.html","<div ng-hide=\"$select.searchEnab
 $templateCache.put("selectize/no-choice.tpl.html","<div class=\"ui-select-no-choice selectize-dropdown\" ng-show=\"$select.items.length == 0\"> <div class=\"selectize-dropdown-content\"> <div data-selectable=\"\" ng-transclude></div> </div> </div> ");
 $templateCache.put("selectize/select-multiple.tpl.html","<div class=\"ui-select-container selectize-control multi plugin-remove_button\" ng-class=\"{\'open\': $select.open}\"> <div class=\"selectize-input\" ng-class=\"{\'focus\': $select.open, \'disabled\': $select.disabled, \'selectize-focus\' : $select.focus}\" ng-click=\"$select.open && !$select.searchEnabled ? $select.toggle($event) : $select.activate()\"> <div class=\"ui-select-match\"></div> <input type=\"search\" autocomplete=\"off\" tabindex=\"-1\" class=\"ui-select-search\" ng-class=\"{\'ui-select-search-hidden\':!$select.searchEnabled}\" placeholder=\"{{$select.getPlaceholder()}}\" ng-model=\"$select.search\" ng-disabled=\"$select.disabled\" aria-expanded=\"{{$select.open}}\" aria-label=\"{{ $select.baseTitle }}\" data-disallow-drop=\"data-disallow-drop\"> </div> <div ng-show=\"$select.open\" class=\"ui-select-dropdown selectize-dropdown\" ng-class=\"{\'single\': !$select.multiple, \'multi\': $select.multiple}\"> <div class=\"ui-select-header\"></div> <div class=\"ui-select-choices\"></div> <div class=\"ui-select-footer\"></div> </div> <div class=\"ui-select-no-choice\"></div> </div> ");
 $templateCache.put("selectize/select.tpl.html","<div class=\"ui-select-container selectize-control single\" ng-class=\"{\'open\': $select.open}\"> <div class=\"selectize-input\" ng-class=\"{\'focus\': $select.open, \'disabled\': $select.disabled, \'selectize-focus\' : $select.focus}\" ng-click=\"$select.open && !$select.searchEnabled ? $select.toggle($event) : $select.activate()\"> <div class=\"ui-select-match\"></div> <input type=\"search\" autocomplete=\"off\" tabindex=\"-1\" class=\"ui-select-search ui-select-toggle\" ng-class=\"{\'ui-select-search-hidden\':!$select.searchEnabled}\" ng-click=\"$select.toggle($event)\" placeholder=\"{{$select.placeholder}}\" ng-model=\"$select.search\" ng-hide=\"!$select.isEmpty() && !$select.open\" ng-disabled=\"$select.disabled\" aria-label=\"{{ $select.baseTitle }}\"> </div> <div ng-show=\"$select.open\" class=\"ui-select-dropdown selectize-dropdown\" ng-class=\"{\'single\': !$select.multiple, \'multi\': $select.multiple}\"> <div class=\"ui-select-header\"></div> <div class=\"ui-select-choices\"></div> <div class=\"ui-select-footer\"></div> </div> <div class=\"ui-select-no-choice\"></div> </div> ");
-$templateCache.put("select2/choices.tpl.html","<ul tabindex=\"-1\" class=\"ui-select-choices ui-select-choices-content select2-results\"> <li class=\"ui-select-choices-group\" ng-class=\"{\'select2-result-with-children\': $select.choiceGrouped($group) }\"> <div ng-show=\"$select.choiceGrouped($group)\" class=\"ui-select-choices-group-label select2-result-label\" ng-bind=\"$group.name\"></div> <ul id=\"ui-select-choices-{{ $select.generatedId }}\" ng-class=\"{\'select2-result-sub\': $select.choiceGrouped($group), \'select2-result-single\': !$select.choiceGrouped($group) }\"> <li role=\"option\" ng-attr-id=\"ui-select-choices-row-{{ $select.generatedId }}-{{$index}}\" class=\"ui-select-choices-row\" ng-class=\"{\'select2-highlighted\': $index === $select.activeIndex, \'select2-disabled\': (($select._disabledKeySet && $select.multiple && !$select.removeSelected && $select.getItemKey && $select._disabledKeySet[$select.getItemKey(this[$select.itemProperty])]) || $select.isDisabled(this))}\"> <div class=\"select2-result-label ui-select-choices-row-inner\"></div> </li> </ul> </li> </ul> ");
+$templateCache.put("select2/choices.tpl.html","<ul tabindex=\"-1\" class=\"ui-select-choices ui-select-choices-content select2-results\"> <li class=\"ui-select-choices-group\" ng-class=\"{\'select2-result-with-children\': $select.choiceGrouped($group) }\"> <div ng-show=\"$select.choiceGrouped($group)\" class=\"ui-select-choices-group-label select2-result-label\" ng-bind=\"$group.name\"></div> <ul id=\"ui-select-choices-{{ $select.generatedId }}\" ng-class=\"{\'select2-result-sub\': $select.choiceGrouped($group), \'select2-result-single\': !$select.choiceGrouped($group) }\"> <li role=\"option\" ng-attr-id=\"ui-select-choices-row-{{ $select.generatedId }}-{{$index}}\" class=\"ui-select-choices-row\" ng-class=\"{\'select2-highlighted\': $index === $select.activeIndex, \'select2-disabled\': (($select._disabledKeySet && $select.multiple && !$select.removeSelected && $select.getItemKey && $select._disabledKeySet[$select.getItemKey(this[$select.itemProperty])]) || $select.isDisabled(this))}\"> <div class=\"select2-result-label ui-select-choices-row-inner\"></div> </li> <li class=\"ui-select-group-more select2-more-results\" ng-if=\"$select.search && $group._truncated\"> <a href=\"\" ng-click=\"$select.showMoreGroup($group.name); $event.preventDefault();\">Show more ({{$group._remaining}})</a> </li> </ul> </li> </ul> ");
 $templateCache.put("select2/footer.tpl.html","<div class=\"ui-select-footer\" ng-transclude></div> ");
 $templateCache.put("select2/header.tpl.html","<div class=\"ui-select-header\" ng-transclude></div> ");
 $templateCache.put("select2/match-multiple.tpl.html","<!--\n  select2-choice needs to be before ui-select-multiple\n  otherwise CSS rules from https://github.com/fk/select2-bootstrap-css\n  do not work: [class^=\"select2-choice\"]\n--> <span class=\"ui-select-match\"> <li class=\"ui-select-match-item select2-search-choice\" ng-repeat=\"$item in $select.selected track by $index\" ng-class=\"{\'select2-search-choice-focus\':$selectMultiple.activeMatchIndex === $index, \'select2-locked\':$select.isLocked(this, $index)}\" ui-select-sort=\"$select.selected\"> <span uis-transclude-append></span> <a href=\"javascript:;\" class=\"ui-select-match-close select2-search-choice-close\" ng-click=\"$selectMultiple.removeChoice($index)\" tabindex=\"-1\"></a> </li> </span> ");

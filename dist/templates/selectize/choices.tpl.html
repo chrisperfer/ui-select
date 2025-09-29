@@ -5,6 +5,9 @@
       <div role="option" class="ui-select-choices-row" ng-class="{active: $index === $select.activeIndex, disabled: (($select._disabledKeySet && $select.multiple && !$select.removeSelected && $select.getItemKey && $select._disabledKeySet[$select.getItemKey(this[$select.itemProperty])]) || $select.isDisabled(this))}">
         <div class="option ui-select-choices-row-inner" data-selectable></div>
       </div>
+      <div class="ui-select-group-more" ng-if="$select.search && $group._truncated">
+        <a href="" class="option" ng-click="$select.showMoreGroup($group.name); $event.preventDefault();">Show more ({{$group._remaining}})</a>
+      </div>
     </div>
   </div>
 </div>

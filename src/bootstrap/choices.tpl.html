@@ -6,5 +6,8 @@
     ng-class="{active: $index === $select.activeIndex, disabled: (($select._disabledKeySet && $select.multiple && !$select.removeSelected && $select.getItemKey && $select._disabledKeySet[$select.getItemKey(this[$select.itemProperty])]) || $select.isDisabled(this))}" role="option">
       <span class="ui-select-choices-row-inner"></span>
     </div>
+    <div class="ui-select-group-more" ng-if="$select.search && $group._truncated">
+      <button type="button" class="btn btn-link btn-xs" ng-click="$select.showMoreGroup($group.name)">Show more ({{$group._remaining}})</button>
+    </div>
   </li>
 </ul>

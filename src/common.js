@@ -107,7 +107,7 @@ var uis = angular.module('ui.select', [])
   dropdownPosition: 'auto',
   removeSelected: true,
   resetSearchInput: true,
-  searchDebounce: 0,
+  searchDebounce: 200, // Default 200ms debounce for better performance
   generateId: function() {
     return latestId++;
   },
@@ -115,7 +115,12 @@ var uis = angular.module('ui.select', [])
   spinnerEnabled: false,
   spinnerClass: 'glyphicon glyphicon-refresh ui-select-spin',
   backspaceReset: true,
-  preserveArrayReference: false // Opt-in to preserve array reference on model updates
+  preserveArrayReference: false, // Opt-in to preserve array reference on model updates
+  // Performance: search-time caps (opt-in)
+  visibleLimitWhenSearching: undefined,
+  visibleLimitWhenSearchingStep: 100,
+  groupVisibleLimitWhenSearching: undefined,
+  groupVisibleLimitWhenSearchingStep: 50
 })
 
 // See Rename minErr and make it accessible from outside https://github.com/angular/angular.js/issues/6913

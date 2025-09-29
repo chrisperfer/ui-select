@@ -265,9 +265,88 @@ uis.controller('uiSelectCtrl',
           ctrl.setItemsFn(filteredItems);
         }
       }
+      // Legacy: cap for ungrouped lists (existing behavior)
       if (!ctrl.isGrouped && angular.isNumber(ctrl.visibleLimit) && ctrl.visibleLimit > 0 && angular.isArray(ctrl.items)) {
         ctrl.items = ctrl.items.slice(0, ctrl.visibleLimit);
       }
+
+      // Capture count before applying search-time cap
+      var preCapCount = angular.isArray(ctrl.items) ? ctrl.items.length : 0;
+      if (ctrl.isGrouped && angular.isArray(ctrl.groups)) {
+        preCapCount = 0;
+        for (var pci = 0; pci < ctrl.groups.length; pci++) {
+          preCapCount += (ctrl.groups[pci].items && ctrl.groups[pci].items.length) ? ctrl.groups[pci].items.length : 0;
+        }
+      }
+
+      // New: cap visible items while searching (two modes: per-group or global)
+      if (ctrl.search && ctrl.search.length > 0) {
+        var appliedCap = false;
+        if (ctrl.isGrouped && angular.isArray(ctrl.groups) && angular.isNumber(ctrl.groupVisibleLimitWhenSearching) && ctrl.groupVisibleLimitWhenSearching > 0) {
+          // Per-group cap
+          var newGroups = [];
+          for (var ggi = 0; ggi < ctrl.groups.length; ggi++) {
+            var gg = ctrl.groups[ggi];
+            var glimit = ctrl._groupCurrentVisibleLimit && angular.isNumber(ctrl._groupCurrentVisibleLimit[gg.name]) ?
+              ctrl._groupCurrentVisibleLimit[gg.name] : ctrl.groupVisibleLimitWhenSearching;
+            var gcount = (gg.items && gg.items.length) ? gg.items.length : 0;
+            var gtake = Math.max(Math.min(glimit, gcount), 0);
+            var gtruncated = gcount > gtake;
+            var gremaining = gtruncated ? (gcount - gtake) : 0;
+            newGroups.push({ name: gg.name, items: gg.items.slice(0, gtake), _truncated: gtruncated, _remaining: gremaining });
+          }
+          ctrl.groups = newGroups;
+          // Rebuild items
+          ctrl.items = [];
+          ctrl.groups.forEach(function(group) { ctrl.items = ctrl.items.concat(group.items); });
+          appliedCap = true;
+        }
+
+        if (!appliedCap) {
+          // Global cap
+          var effectiveLimit = (angular.isNumber(ctrl._currentVisibleLimitWhenSearching) && ctrl._currentVisibleLimitWhenSearching > 0) ?
+            ctrl._currentVisibleLimitWhenSearching : ctrl.visibleLimitWhenSearching;
+          if (angular.isNumber(effectiveLimit) && effectiveLimit > 0) {
+            var remaining = effectiveLimit;
+            if (ctrl.isGrouped && angular.isArray(ctrl.groups)) {
+              var limitedGroups = [];
+              for (var gi = 0; gi < ctrl.groups.length && remaining > 0; gi++) {
+                var g = ctrl.groups[gi];
+                var take = Math.min(remaining, (g.items && g.items.length) ? g.items.length : 0);
+                if (take > 0) {
+                  limitedGroups.push({ name: g.name, items: g.items.slice(0, take) });
+                  remaining -= take;
+                }
+              }
+              ctrl.groups = limitedGroups;
+              // Rebuild items from limited groups
+              ctrl.items = [];
+              ctrl.groups.forEach(function(group) { ctrl.items = ctrl.items.concat(group.items); });
+            } else if (!ctrl.isGrouped && angular.isArray(ctrl.items)) {
+              ctrl.items = ctrl.items.slice(0, remaining);
+            }
+          }
+        }
+      }
+      // Compute remaining and whether truncated for show-more UI
+      var postCapCount = angular.isArray(ctrl.items) ? ctrl.items.length : 0;
+      ctrl.remainingCountWhenSearching = (ctrl.search && ctrl.search.length > 0) ? Math.max(preCapCount - postCapCount, 0) : 0;
+      ctrl.truncatedWhileSearching = ctrl.remainingCountWhenSearching > 0;
+
+      // Pre-compute disabled states for all items for O(1) lookup in templates
+      if (ctrl.disableChoiceExpression && ctrl.items && ctrl.items.length && ctrl.parserResult) {
+        ctrl._itemDisabledFlags = {};
+        var disableChoiceExpGetter = $parse(ctrl.disableChoiceExpression);
+        ctrl.items.forEach(function(item) {
+          var key = ctrl.getItemKey ? ctrl.getItemKey(item) : item;
+          var locals = {};
+          locals[ctrl.parserResult.itemName] = item;
+          ctrl._itemDisabledFlags[key] = disableChoiceExpGetter($scope, locals);
+        });
+      } else {
+        ctrl._itemDisabledFlags = null;
+      }
+
       if (ctrl.dropdownPosition === 'auto' || ctrl.dropdownPosition === 'up'){
         $scope.calculateDropdownPos();
       }
@@ -275,7 +354,7 @@ uis.controller('uiSelectCtrl',
     };
 
     // See https://github.com/angular/angular.js/blob/v1.2.15/src/ng/directive/ngRepeat.js#L259
-    $scope.$watchCollection(ctrl.parserResult.source, function(items) {
+  $scope.$watchCollection(ctrl.parserResult.source, function(items) {
       if (items === undefined || items === null) {
         // If the user specifies undefined or null => reset the collection
         // Special case: items can be undefined if the user did not initialized the collection on the scope
@@ -394,7 +473,14 @@ uis.controller('uiSelectCtrl',
       }
 
       if (!isDisabled && angular.isDefined(ctrl.disableChoiceExpression)) {
-        isDisabled = !!(itemScope.$eval(ctrl.disableChoiceExpression));
+        // Use pre-computed cache if available for O(1) lookup
+        if (ctrl._itemDisabledFlags) {
+          var itemKey = ctrl.getItemKey ? ctrl.getItemKey(item) : item;
+          isDisabled = !!ctrl._itemDisabledFlags[itemKey];
+        } else {
+          // Fallback to runtime evaluation if cache not available
+          isDisabled = !!(itemScope.$eval(ctrl.disableChoiceExpression));
+        }
       }
 
       _updateItemDisabled(item, isDisabled);

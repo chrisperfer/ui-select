@@ -6,6 +6,9 @@
       <li role="option" ng-attr-id="ui-select-choices-row-{{ $select.generatedId }}-{{$index}}" class="ui-select-choices-row" ng-class="{'select2-highlighted': $index === $select.activeIndex, 'select2-disabled': (($select._disabledKeySet && $select.multiple && !$select.removeSelected && $select.getItemKey && $select._disabledKeySet[$select.getItemKey(this[$select.itemProperty])]) || $select.isDisabled(this))}">
         <div class="select2-result-label ui-select-choices-row-inner"></div>
       </li>
+      <li class="ui-select-group-more select2-more-results" ng-if="$select.search && $group._truncated">
+        <a href="" ng-click="$select.showMoreGroup($group.name); $event.preventDefault();">Show more ({{$group._remaining}})</a>
+      </li>
     </ul>
   </li>
 </ul>

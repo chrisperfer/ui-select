@@ -92,10 +92,25 @@ uis.directive('uiSelectChoices',
         if (!isNaN($select.visibleLimit) && $select.visibleLimit > 0) {
           if ($select.refreshItems) { $select.refreshItems(); }
         }
+
+        // New: limit total visible items while searching (works for grouped and ungrouped)
+        var parentVisibleLimitWhenSearching = $select.$element && $select.$element.attr('visible-limit-when-searching');
+        var vlwsValue = angular.isDefined(attrs.visibleLimitWhenSearching) ? attrs.visibleLimitWhenSearching : parentVisibleLimitWhenSearching;
+        $select.visibleLimitWhenSearching = angular.isDefined(vlwsValue) ? parseInt(scope.$eval(vlwsValue)) : uiSelectConfig.visibleLimitWhenSearching;
+        if (!isNaN($select.visibleLimitWhenSearching) && $select.visibleLimitWhenSearching > 0) {
+          if ($select.refreshItems) { $select.refreshItems(); }
+        }
         $select.dropdownPosition = attrs.position ? attrs.position.toLowerCase() : uiSelectConfig.dropdownPosition;
 
+        var lastSearch;
         var onSearchChanged = function() {
           var newValue = $select.search;
+          // Reset current caps when search text changes
+          if (newValue !== lastSearch) {
+            $select._currentVisibleLimitWhenSearching = $select.visibleLimitWhenSearching;
+            $select._groupCurrentVisibleLimit = {};
+            lastSearch = newValue;
+          }
           if(newValue && !$select.open && $select.multiple) $select.activate(false, true);
           $select.activeIndex = $select.tagging.isActivated ? -1 : 0;
           if (!attrs.minimumInputLength || $select.search.length >= attrs.minimumInputLength) {
@@ -119,6 +134,45 @@ uis.directive('uiSelectChoices',
           var refreshDelay = scope.$eval(attrs.refreshDelay);
           $select.refreshDelay = refreshDelay !== undefined ? refreshDelay : uiSelectConfig.refreshDelay;
         });
+
+        // Optional: step for show-more while searching (global)
+        var parentVlwsStep = $select.$element && $select.$element.attr('visible-limit-when-searching-step');
+        var vlwsStepValue = angular.isDefined(attrs.visibleLimitWhenSearchingStep) ? attrs.visibleLimitWhenSearchingStep : parentVlwsStep;
+        var stepDefault = uiSelectConfig.visibleLimitWhenSearchingStep;
+        $select.visibleLimitWhenSearchingStep = angular.isDefined(vlwsStepValue) ? parseInt(scope.$eval(vlwsStepValue)) : stepDefault;
+
+        // Expose a helper to increase current global cap when searching
+        $select.showMore = function(step) {
+          var inc = angular.isNumber(step) ? step : $select.visibleLimitWhenSearchingStep;
+          var base = angular.isNumber($select._currentVisibleLimitWhenSearching) ? $select._currentVisibleLimitWhenSearching : ($select.visibleLimitWhenSearching || 0);
+          $select._currentVisibleLimitWhenSearching = base + inc;
+          if ($select.refreshItems) { $select.refreshItems(); }
+        };
+
+        // Per-group variant: parse limits and step
+        var parentGroupVl = $select.$element && $select.$element.attr('group-visible-limit-when-searching');
+        var groupVlValue = angular.isDefined(attrs.groupVisibleLimitWhenSearching) ? attrs.groupVisibleLimitWhenSearching : parentGroupVl;
+        $select.groupVisibleLimitWhenSearching = angular.isDefined(groupVlValue) ? parseInt(scope.$eval(groupVlValue)) : uiSelectConfig.groupVisibleLimitWhenSearching;
+
+        var parentGroupStep = $select.$element && $select.$element.attr('group-visible-limit-when-searching-step');
+        var groupStepValue = angular.isDefined(attrs.groupVisibleLimitWhenSearchingStep) ? attrs.groupVisibleLimitWhenSearchingStep : parentGroupStep;
+        var groupStepDefault = uiSelectConfig.groupVisibleLimitWhenSearchingStep;
+        $select.groupVisibleLimitWhenSearchingStep = angular.isDefined(groupStepValue) ? parseInt(scope.$eval(groupStepValue)) : groupStepDefault;
+
+        // Map of per-group current limits (by group name)
+        $select._groupCurrentVisibleLimit = {};
+
+        // Expose per-group show more
+        $select.showMoreGroup = function(groupName, step) {
+          if (!groupName) return;
+          var inc = angular.isNumber(step) ? step : $select.groupVisibleLimitWhenSearchingStep;
+          var curr = $select._groupCurrentVisibleLimit[groupName];
+          if (!angular.isNumber(curr)) {
+            curr = angular.isNumber($select.groupVisibleLimitWhenSearching) ? $select.groupVisibleLimitWhenSearching : 0;
+          }
+          $select._groupCurrentVisibleLimit[groupName] = curr + inc;
+          if ($select.refreshItems) { $select.refreshItems(); }
+        };
 
         scope.$watch('$select.open', function(open) {
           if (open) {
