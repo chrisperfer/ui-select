@@ -49,6 +49,11 @@ uis.controller('uiSelectCtrl',
   ctrl.$filter = $filter;
   ctrl.$element = $element;
 
+  // Virtual scrolling configuration
+  ctrl.virtualScroll = uiSelectConfig.virtualScroll;
+  ctrl.virtualScrollItemHeight = uiSelectConfig.virtualScrollItemHeight;
+  ctrl.virtualScrollVisibleItems = uiSelectConfig.virtualScrollVisibleItems;
+
   // Use $injector to check for $animate and store a reference to it
   ctrl.$animate = (function () {
     try {

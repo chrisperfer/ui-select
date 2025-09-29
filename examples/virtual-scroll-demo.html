@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en" ng-app="demo">
+<head>
+  <meta charset="utf-8">
+  <title>AngularJS ui-select Virtual Scrolling Demo</title>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.7.9/angular.min.js"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.7.9/angular-sanitize.js"></script>
+
+  <!-- angular-vs-repeat for virtual scrolling -->
+  <script src="../node_modules/angular-vs-repeat/dist/angular-vs-repeat.min.js"></script>
+
+  <!-- ui-select -->
+  <link rel="stylesheet" href="../dist/select.css">
+  <script src="../dist/select.js"></script>
+
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/3.4.5/select2.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/selectize.js/0.8.5/css/selectize.default.css">
+
+  <style>
+    body {
+      padding: 20px;
+      font-family: Arial, sans-serif;
+    }
+    .demo-section {
+      margin-bottom: 40px;
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .demo-section h3 {
+      margin-top: 0;
+      color: #333;
+    }
+    .performance-info {
+      margin-top: 10px;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .config-options {
+      margin-bottom: 20px;
+      padding: 15px;
+      background: #f9f9f9;
+      border-radius: 4px;
+    }
+    .config-options label {
+      margin-right: 20px;
+    }
+  </style>
+
+  <script>
+    angular.module('demo', ['ngSanitize', 'ui.select', 'vs-repeat'])
+    .controller('DemoCtrl', function($scope) {
+      var vm = this;
+
+      // Configuration options
+      vm.enableVirtualScroll = true;
+      vm.itemCount = 10000;
+      vm.itemHeight = 25;
+      vm.visibleItems = 20;
+
+      // Generate large dataset
+      vm.generateItems = function(count) {
+        var items = [];
+        for (var i = 1; i <= count; i++) {
+          items.push({
+            id: i,
+            name: 'Item ' + i,
+            description: 'Description for item ' + i,
+            category: 'Category ' + Math.floor((i-1) / 100 + 1)
+          });
+        }
+        return items;
+      };
+
+      // Initialize items
+      vm.items = vm.generateItems(vm.itemCount);
+
+      // Selected items for different examples
+      vm.selected = {};
+      vm.selectedMultiple = [];
+
+      // Regenerate items when count changes
+      vm.updateItemCount = function() {
+        vm.items = vm.generateItems(vm.itemCount);
+        vm.selected = {};
+        vm.selectedMultiple = [];
+      };
+
+      // Performance tracking
+      vm.renderStart = null;
+      vm.renderTime = null;
+
+      $scope.$watch(function() { return vm.enableVirtualScroll; }, function(newVal) {
+        // Force re-render when virtual scroll is toggled
+        var temp = vm.items;
+        vm.items = [];
+        setTimeout(function() {
+          $scope.$apply(function() {
+            vm.items = temp;
+          });
+        }, 100);
+      });
+    });
+  </script>
+</head>
+
+<body ng-controller="DemoCtrl as demo">
+  <div class="container-fluid">
+    <h1>ui-select Virtual Scrolling Demo</h1>
+    <p class="lead">
+      This demo shows the virtual scrolling feature for handling large datasets efficiently.
+      Virtual scrolling only renders visible items in the DOM, drastically improving performance for lists with thousands of items.
+    </p>
+
+    <div class="config-options">
+      <h4>Configuration Options</h4>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" ng-model="demo.enableVirtualScroll">
+          Enable Virtual Scrolling
+        </label>
+      </div>
+      <div class="form-group">
+        <label>Number of Items:</label>
+        <input type="number" ng-model="demo.itemCount" min="100" max="50000" step="1000"
+               ng-change="demo.updateItemCount()" class="form-control" style="width: 150px; display: inline-block;">
+        <span class="text-muted">(Current: {{demo.itemCount}} items)</span>
+      </div>
+      <div class="form-group" ng-show="demo.enableVirtualScroll">
+        <label>Item Height (px):</label>
+        <input type="number" ng-model="demo.itemHeight" min="20" max="50" class="form-control" style="width: 100px; display: inline-block;">
+
+        <label style="margin-left: 20px;">Visible Items:</label>
+        <input type="number" ng-model="demo.visibleItems" min="10" max="50" class="form-control" style="width: 100px; display: inline-block;">
+      </div>
+    </div>
+
+    <!-- Standard Select (Single) with Virtual Scroll -->
+    <div class="demo-section">
+      <h3>Single Select with {{demo.itemCount}} items ({{demo.enableVirtualScroll ? 'Virtual Scroll Enabled' : 'Standard Rendering'}})</h3>
+
+      <ui-select ng-model="demo.selected.single" theme="bootstrap">
+        <ui-select-match placeholder="Select an item...">
+          {{$select.selected.name}}
+        </ui-select-match>
+        <ui-select-choices repeat="item in demo.items | filter: $select.search"
+                          virtual-scroll="{{demo.enableVirtualScroll}}"
+                          virtual-scroll-item-height="{{demo.itemHeight}}"
+                          virtual-scroll-visible-items="{{demo.visibleItems}}">
+          <div ng-bind-html="item.name | highlight: $select.search"></div>
+          <small>{{item.description}}</small>
+        </ui-select-choices>
+      </ui-select>
+
+      <div class="performance-info">
+        <strong>Performance Notes:</strong>
+        <ul>
+          <li ng-if="!demo.enableVirtualScroll">Standard rendering: All {{demo.itemCount}} items are rendered in the DOM</li>
+          <li ng-if="demo.enableVirtualScroll">Virtual scrolling: Only ~{{demo.visibleItems}} items are rendered at any time</li>
+          <li>Try searching to see filtering performance</li>
+          <li>Scroll through the list to see rendering behavior</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Multiple Select with Virtual Scroll -->
+    <div class="demo-section">
+      <h3>Multiple Select with Virtual Scrolling</h3>
+
+      <ui-select ng-model="demo.selectedMultiple" theme="bootstrap" multiple>
+        <ui-select-match placeholder="Select items...">
+          {{$item.name}}
+        </ui-select-match>
+        <ui-select-choices repeat="item in demo.items | filter: $select.search"
+                          virtual-scroll="{{demo.enableVirtualScroll}}"
+                          virtual-scroll-item-height="{{demo.itemHeight}}"
+                          virtual-scroll-visible-items="{{demo.visibleItems}}">
+          <div ng-bind-html="item.name | highlight: $select.search"></div>
+          <small>{{item.category}}</small>
+        </ui-select-choices>
+      </ui-select>
+
+      <div class="performance-info">
+        <strong>Selected Items:</strong> {{demo.selectedMultiple.length}}
+        <div ng-if="demo.selectedMultiple.length > 0">
+          <span ng-repeat="item in demo.selectedMultiple" class="label label-primary" style="margin-right: 5px;">
+            {{item.name}}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Select2 Theme with Virtual Scroll -->
+    <div class="demo-section">
+      <h3>Select2 Theme with Virtual Scrolling</h3>
+
+      <ui-select ng-model="demo.selected.select2" theme="select2" style="width: 100%;">
+        <ui-select-match placeholder="Select an item...">
+          {{$select.selected.name}}
+        </ui-select-match>
+        <ui-select-choices repeat="item in demo.items | filter: $select.search"
+                          virtual-scroll="{{demo.enableVirtualScroll}}"
+                          virtual-scroll-item-height="{{demo.itemHeight}}"
+                          virtual-scroll-visible-items="{{demo.visibleItems}}">
+          <div ng-bind-html="item.name | highlight: $select.search"></div>
+        </ui-select-choices>
+      </ui-select>
+    </div>
+
+    <!-- Selectize Theme with Virtual Scroll -->
+    <div class="demo-section">
+      <h3>Selectize Theme with Virtual Scrolling</h3>
+
+      <ui-select ng-model="demo.selected.selectize" theme="selectize">
+        <ui-select-match placeholder="Select an item...">
+          {{$select.selected.name}}
+        </ui-select-match>
+        <ui-select-choices repeat="item in demo.items | filter: $select.search"
+                          virtual-scroll="{{demo.enableVirtualScroll}}"
+                          virtual-scroll-item-height="{{demo.itemHeight}}"
+                          virtual-scroll-visible-items="{{demo.visibleItems}}">
+          <div ng-bind-html="item.name | highlight: $select.search"></div>
+        </ui-select-choices>
+      </ui-select>
+    </div>
+
+    <!-- Grouped Items with Virtual Scroll -->
+    <div class="demo-section">
+      <h3>Grouped Items with Virtual Scrolling</h3>
+
+      <ui-select ng-model="demo.selected.grouped" theme="bootstrap">
+        <ui-select-match placeholder="Select an item...">
+          {{$select.selected.name}}
+        </ui-select-match>
+        <ui-select-choices group-by="'category'"
+                          repeat="item in demo.items | filter: $select.search"
+                          virtual-scroll="{{demo.enableVirtualScroll}}"
+                          virtual-scroll-item-height="{{demo.itemHeight}}"
+                          virtual-scroll-visible-items="{{demo.visibleItems}}">
+          <div ng-bind-html="item.name | highlight: $select.search"></div>
+        </ui-select-choices>
+      </ui-select>
+
+      <div class="performance-info">
+        <strong>Note:</strong> Grouped items also benefit from virtual scrolling. Each group only renders visible items.
+      </div>
+    </div>
+
+    <!-- Performance Comparison -->
+    <div class="demo-section">
+      <h3>Performance Tips</h3>
+      <ul>
+        <li><strong>When to use Virtual Scrolling:</strong> Lists with more than 500-1000 items</li>
+        <li><strong>Item Height:</strong> Set this to match your actual item height for smooth scrolling</li>
+        <li><strong>Visible Items:</strong> Controls the viewport height (height = itemHeight × visibleItems)</li>
+        <li><strong>Trade-offs:</strong> Virtual scrolling adds minimal overhead for scroll position calculation but provides massive performance gains for large lists</li>
+        <li><strong>Browser Support:</strong> Works in all modern browsers that support AngularJS</li>
+      </ul>
+    </div>
+  </div>
+</body>
+</html>

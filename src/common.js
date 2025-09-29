@@ -120,7 +120,11 @@ var uis = angular.module('ui.select', [])
   visibleLimitWhenSearching: undefined,
   visibleLimitWhenSearchingStep: 100,
   groupVisibleLimitWhenSearching: undefined,
-  groupVisibleLimitWhenSearchingStep: 50
+  groupVisibleLimitWhenSearchingStep: 50,
+  // Virtual scrolling options (opt-in)
+  virtualScroll: false, // Enable virtual scrolling for large lists
+  virtualScrollItemHeight: 25, // Estimated height of each item in pixels
+  virtualScrollVisibleItems: 20 // Number of items to render in viewport
 })
 
 // See Rename minErr and make it accessible from outside https://github.com/angular/angular.js/issues/6913

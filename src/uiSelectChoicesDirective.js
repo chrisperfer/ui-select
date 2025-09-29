@@ -13,6 +13,9 @@ uis.directive('uiSelectChoices',
 
       // Gets theme attribute from parent (ui-select)
       var theme = tElement.parent().attr('theme') || uiSelectConfig.theme;
+
+      // For now, always use the standard template. Virtual scrolling will be
+      // applied dynamically based on attributes
       return theme + '/choices.tpl.html';
     },
 
@@ -23,6 +26,7 @@ uis.directive('uiSelectChoices',
       // var repeat = RepeatParser.parse(attrs.repeat);
       var groupByExp = tAttrs.groupBy;
       var groupFilterExp = tAttrs.groupFilter;
+      var isVirtualScroll = tAttrs.virtualScroll && tAttrs.virtualScroll !== 'false';
 
       if (groupByExp) {
         var groups = tElement.querySelectorAll('.ui-select-choices-group');
@@ -43,6 +47,7 @@ uis.directive('uiSelectChoices',
         throw uiSelectMinErr('rows', "Expected 1 .ui-select-choices-row but got '{0}'.", choices.length);
       }
 
+      // Apply ng-repeat - virtual scroll will be handled at runtime if needed
       choices.attr('ng-repeat', parserResult.repeatExpression(groupByExp))
              .attr('ng-if', '$select.open'); //Prevent unnecessary watches when dropdown is closed
 
@@ -101,6 +106,22 @@ uis.directive('uiSelectChoices',
           if ($select.refreshItems) { $select.refreshItems(); }
         }
         $select.dropdownPosition = attrs.position ? attrs.position.toLowerCase() : uiSelectConfig.dropdownPosition;
+
+        // Virtual scrolling configuration - can be overridden at directive level
+        var vsEnabled = angular.isDefined(attrs.virtualScroll) ?
+          scope.$eval(attrs.virtualScroll) : uiSelectConfig.virtualScroll;
+        $select.virtualScroll = vsEnabled;
+
+        if (vsEnabled) {
+          // Set virtual scroll parameters
+          var vsItemHeight = angular.isDefined(attrs.virtualScrollItemHeight) ?
+            parseInt(attrs.virtualScrollItemHeight) : uiSelectConfig.virtualScrollItemHeight;
+          $select.virtualScrollItemHeight = vsItemHeight;
+
+          var vsVisibleItems = angular.isDefined(attrs.virtualScrollVisibleItems) ?
+            parseInt(attrs.virtualScrollVisibleItems) : uiSelectConfig.virtualScrollVisibleItems;
+          $select.virtualScrollVisibleItems = vsVisibleItems;
+        }
 
         var lastSearch;
         var onSearchChanged = function() {
